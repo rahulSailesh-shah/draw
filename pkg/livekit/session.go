@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"draw/pkg/config"
+	"draw/pkg/llm"
+	"draw/pkg/speech"
 
 	"draw/internal/db/repo"
 
@@ -22,7 +24,9 @@ import (
 )
 
 type SessionCallbacks struct {
-	OnMeetingEnd func(meetingID string, recordingURL string, transcriptURL string, err error)
+	OnMeetingEnd  func(meetingID string, recordingURL string, transcriptURL string, err error)
+	OnLLMResponse func(boardID string, response *llm.CanvasResponse, err error)
+	GetBoardState func(boardID string) (json.RawMessage, error)
 }
 
 type StreamTextData struct {
@@ -32,11 +36,15 @@ type StreamTextData struct {
 
 type LiveKitSession struct {
 	userDetails     *repo.User
+	boardID         string
 	room            *lksdk.Room
 	handler         LivekitHandler
+	speechClient    *speech.Client
+	llmClient       *llm.Client
 	egressInfo      *livekit.EgressInfo
 	lkConfig        *config.LiveKitConfig
-	geminiConfig    *config.GeminiConfig
+	speechConfig    *config.SpeechConfig
+	llmConfig       *config.LLMConfig
 	awsConfig       *config.AWSConfig
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -49,22 +57,40 @@ type LiveKitSession struct {
 
 func NewLiveKitSession(
 	userDetails *repo.User,
-	config *config.AppConfig,
+	boardID string,
+	cfg *config.AppConfig,
 	callbacks SessionCallbacks,
-) *LiveKitSession {
+) (*LiveKitSession, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	speechClient, err := speech.NewClient(cfg.Speech.Host)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create speech client: %w", err)
+	}
+
+	llmClient, err := llm.NewClient(&cfg.LLM)
+	if err != nil {
+		speechClient.Close()
+		cancel()
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
+	}
 
 	return &LiveKitSession{
 		userDetails:     userDetails,
-		lkConfig:        &config.LiveKit,
-		geminiConfig:    &config.Gemini,
-		awsConfig:       &config.AWS,
+		boardID:         boardID,
+		lkConfig:        &cfg.LiveKit,
+		speechConfig:    &cfg.Speech,
+		llmConfig:       &cfg.LLM,
+		speechClient:    speechClient,
+		llmClient:       llmClient,
+		awsConfig:       &cfg.AWS,
 		ctx:             ctx,
 		cancel:          cancel,
 		callbacks:       callbacks,
 		stopOnce:        sync.Once{},
 		textStreamQueue: make(chan StreamTextData, 100),
-	}
+	}, nil
 }
 
 func (s *LiveKitSession) Start() error {
@@ -79,9 +105,9 @@ func (s *LiveKitSession) Stop() error {
 	s.stopOnce.Do(func() {
 		s.cancel()
 		if s.egressInfo != nil {
-			// if err := s.stopRecording(s.egressInfo.EgressId); err != nil {
-			// 	stopErr = fmt.Errorf("failed to stop recording: %w", err)
-			// }
+			if err := s.stopRecording(s.egressInfo.EgressId); err != nil {
+				stopErr = fmt.Errorf("failed to stop recording: %w", err)
+			}
 		}
 		if s.textStreamQueue != nil {
 			close(s.textStreamQueue)
@@ -92,17 +118,21 @@ func (s *LiveKitSession) Stop() error {
 		if s.handler != nil {
 			s.handler.Close()
 		}
-		// invoke post process callback
+		if s.speechClient != nil {
+			s.speechClient.Close()
+		}
+		if s.llmClient != nil {
+			s.llmClient.Close()
+		}
 	})
 	return stopErr
 }
 
 func (s *LiveKitSession) GenerateUserToken() (string, error) {
 	at := auth.NewAccessToken(s.lkConfig.APIKey, s.lkConfig.APISecret)
-	// !FIXME
 	grant := &auth.VideoGrant{
 		RoomJoin: true,
-		Room:     "board",
+		Room:     s.boardID,
 	}
 	at.SetVideoGrant(grant).
 		SetIdentity(s.userDetails.Name).
@@ -114,11 +144,66 @@ func (s *LiveKitSession) GenerateUserToken() (string, error) {
 	return token, nil
 }
 
+func (s *LiveKitSession) HandleMute() (string, error) {
+	if s.handler == nil {
+		return "", nil
+	}
+	return s.handler.OnMute()
+}
+
+func (s *LiveKitSession) HandleUnmute() error {
+	if s.handler == nil {
+		return nil
+	}
+	return s.handler.OnUnmute()
+}
+
 func (s *LiveKitSession) connectBot() error {
 	audioWriterChan := make(chan media.PCM16Sample, 500)
 
-	// !FIXME
-	s.handler = nil
+	sessionID := fmt.Sprintf("%s:%s", s.boardID, s.userDetails.ID)
+
+	handler, err := NewVoiceHandler(VoiceHandlerConfig{
+		SessionID:    sessionID,
+		BoardID:      s.boardID,
+		UserID:       s.userDetails.ID,
+		SpeechClient: s.speechClient,
+		LLMClient:    s.llmClient,
+		OnTranscribe: func(sessID string, transcription string, err error) {
+			if err != nil {
+				logger.Errorw("Transcription error", err, "sessionID", sessID)
+				return
+			}
+			fmt.Println("Transcription received", "sessionID", sessID, "transcription", transcription)
+		},
+		OnLLMResponse: func(sessID string, response *llm.CanvasResponse, err error) {
+			if err != nil {
+				logger.Errorw("LLM error", err, "sessionID", sessID)
+				if s.callbacks.OnLLMResponse != nil {
+					s.callbacks.OnLLMResponse(s.boardID, nil, err)
+				}
+				return
+			}
+			logger.Infow("LLM response", "sessionID", sessID, "explanation", response.Explanation)
+
+			// Stream response to client via text stream
+			s.textStreamQueue <- StreamTextData{
+				Type: "canvas_update",
+				Data: response,
+			}
+
+			// Call the callback
+			if s.callbacks.OnLLMResponse != nil {
+				s.callbacks.OnLLMResponse(s.boardID, response, nil)
+			}
+		},
+		GetBoardState: s.callbacks.GetBoardState,
+	})
+	if err != nil {
+		close(audioWriterChan)
+		return fmt.Errorf("failed to create voice handler: %w", err)
+	}
+	s.handler = handler
 
 	if err := s.connectToRoom(); err != nil {
 		s.handler.Close()
@@ -127,7 +212,7 @@ func (s *LiveKitSession) connectBot() error {
 	}
 
 	go s.handlePublish(audioWriterChan)
-	// go s.handleTextStreamQueue()
+	go s.handleTextStreamQueue()
 
 	// egressInfo, err := s.startRecording()
 	// if err != nil {
@@ -139,11 +224,10 @@ func (s *LiveKitSession) connectBot() error {
 }
 
 func (s *LiveKitSession) connectToRoom() error {
-	// !FIXME
 	room, err := lksdk.ConnectToRoom(s.lkConfig.Host, lksdk.ConnectInfo{
 		APIKey:              s.lkConfig.APIKey,
 		APISecret:           s.lkConfig.APISecret,
-		RoomName:            "board",
+		RoomName:            s.boardID,
 		ParticipantIdentity: "bot",
 	}, s.callbacksForRoom())
 	if err != nil {
@@ -164,6 +248,28 @@ func (s *LiveKitSession) callbacksForRoom() *lksdk.RoomCallback {
 				}
 				pcmRemoteTrack, _ = s.handleSubscribe(track)
 			},
+			OnTrackMuted: func(pub lksdk.TrackPublication, p lksdk.Participant) {
+				// Handle track mute - trigger transcription finalization
+				if pub.Kind() == lksdk.TrackKindAudio {
+					logger.Infow("Audio track muted", "participant", p.Identity())
+					go func() {
+						if _, err := s.HandleMute(); err != nil {
+							logger.Errorw("HandleMute failed", err)
+						}
+					}()
+				}
+			},
+			OnTrackUnmuted: func(pub lksdk.TrackPublication, p lksdk.Participant) {
+				// Handle track unmute - start new transcription session
+				if pub.Kind() == lksdk.TrackKindAudio {
+					logger.Infow("Audio track unmuted", "participant", p.Identity())
+					go func() {
+						if err := s.HandleUnmute(); err != nil {
+							logger.Errorw("HandleUnmute failed", err)
+						}
+					}()
+				}
+			},
 		},
 		OnParticipantDisconnected: func(participant *lksdk.RemoteParticipant) {
 			s.Stop()
@@ -182,6 +288,7 @@ func (s *LiveKitSession) callbacksForRoom() *lksdk.RoomCallback {
 		},
 	}
 }
+
 
 func (s *LiveKitSession) handlePublish(audioWriterChan chan media.PCM16Sample) {
 	publishTrack, err := lkmedia.NewPCMLocalTrack(24000, 1, logger.GetLogger())

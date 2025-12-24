@@ -3,10 +3,9 @@ import { useEffect, useState } from "react";
 import { Loader2Icon } from "lucide-react";
 import { LiveKitRoom } from "@livekit/components-react";
 import { VideoConference } from "../components/video-conference";
+import "@livekit/components-styles";
 
-const SERVER_URL =
-  import.meta.env.VITE_LIVEKIT_SERVER_URL ||
-  "wss://conversense-z0ptqzuw.livekit.cloud";
+const SERVER_URL = "wss://conversense-z0ptqzuw.livekit.cloud";
 
 export interface BoardRoomViewProps {
   boardId: string;
@@ -54,7 +53,7 @@ export const BoardRoomView = ({ boardId }: BoardRoomViewProps) => {
           })
         }
       >
-        {/* <VideoConference meetingId={meetingId} /> */}
+        <VideoConference meetingId={boardId} />
       </LiveKitRoom>
     </div>
   );

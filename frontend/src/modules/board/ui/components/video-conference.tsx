@@ -23,8 +23,7 @@ import {
   useRoomContext,
 } from "@livekit/components-react";
 
-export interface VideoConferenceProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface VideoConferenceProps extends React.HTMLAttributes<HTMLDivElement> {
   meetingId: string;
 }
 
@@ -249,103 +248,6 @@ export const VideoConference = ({
         )}
         <RoomAudioRenderer />
         <ConnectionStateToast />
-      </div>
-
-      {/* Live Intelligence Panel - Right Side */}
-      <div className="w-96 bg-slate-950 border-l border-slate-800 flex flex-col">
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Current Sentiment */}
-          {currentSentiment && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4">
-              <div className="text-slate-400 text-xs font-semibold mb-3 tracking-wide">
-                CURRENT SENTIMENT
-              </div>
-              <div className="flex items-center justify-between mb-3">
-                <span
-                  className={`font-semibold capitalize ${
-                    currentSentiment.sentiment === "positive"
-                      ? "text-emerald-400"
-                      : currentSentiment.sentiment === "negative"
-                        ? "text-rose-400"
-                        : "text-amber-400"
-                  }`}
-                >
-                  {currentSentiment.sentiment}
-                </span>
-                <span className="text-slate-400 text-sm font-medium">
-                  {(currentSentiment.score * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2.5">
-                <div
-                  className="h-2.5 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${currentSentiment.score * 100}%`,
-                    background:
-                      currentSentiment.sentiment === "positive"
-                        ? "linear-gradient(to right, #10b981, #34d399)"
-                        : currentSentiment.sentiment === "negative"
-                          ? "linear-gradient(to right, #ef4444, #f87171)"
-                          : "linear-gradient(to right, #eab308, #fbbf24)",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Transcript */}
-          <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="text-blue-400">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
-                  />
-                </svg>
-              </div>
-              <div className="text-blue-400 font-semibold text-sm tracking-wide">
-                LIVE TRANSCRIPT
-              </div>
-            </div>
-
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {transcripts.length === 0 ? (
-                <p className="text-slate-500 text-sm italic">
-                  No transcripts yet...
-                </p>
-              ) : (
-                transcripts
-                  .slice(-5)
-                  .reverse()
-                  .map((transcript, idx) => (
-                    <div
-                      key={idx}
-                      className="border-l-2 border-blue-500/30 pl-3 py-1"
-                    >
-                      <div className="text-blue-400 text-xs mb-1 font-medium">
-                        {transcript.role === "ai" ? transcript.name : "You"}
-                      </div>
-                      <p className="text-slate-200 text-sm leading-relaxed">
-                        {transcript.content}
-                      </p>
-                      <div className="text-slate-500 text-xs mt-1.5">
-                        {new Date(transcript.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

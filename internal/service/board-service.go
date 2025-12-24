@@ -42,15 +42,18 @@ func (s *boardService) CreateBoard(ctx context.Context, request dto.CreateBoardR
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	session := livekit.NewLiveKitSession(
+	boardID := uuid.New().String()
+
+	session, err := livekit.NewLiveKitSession(
 		&userDetails,
+		boardID,
 		s.config,
 		livekit.SessionCallbacks{},
 	)
 
-	// if err := session.Start(); err != nil {
-	// 	return nil, fmt.Errorf("failed to start session: %w", err)
-	// }
+	if err := session.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start session: %w", err)
+	}
 	
 	token, err := session.GenerateUserToken()
 	if err != nil {
@@ -59,7 +62,7 @@ func (s *boardService) CreateBoard(ctx context.Context, request dto.CreateBoardR
 	}
 
 	return &dto.CreateBoardResponse{
-		ID:    uuid.New().String(),
+		ID:    boardID,
 		Token: token,
 	}, nil
 }

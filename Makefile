@@ -72,4 +72,19 @@ make run-studio:
 	@echo "Starting studio..."
 	@cd packages/auth && bun run db:studio
 
-.PHONY: build run-backend clean watch docker-run docker-down migrate-up migrate-down migrate-status run-frontend run-inngest run-auth run-studio
+# Proto generation for Go (speech service)
+proto-go:
+	@echo "Generating Go protobuf files for speech service..."
+	@protoc --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		--proto_path=pkg/speech/proto \
+		-I=pkg/speech/proto \
+		pkg/speech/proto/speech.proto
+	@echo "Generated: pkg/speech/pb/speech.pb.go, pkg/speech/pb/speech_grpc.pb.go"
+
+# Run speech service (Python)
+run-speech:
+	@echo "Starting speech service..."
+	@cd services/speech && source venv/bin/activate && python -m src.server
+
+.PHONY: build run-backend clean watch docker-run docker-down migrate-up migrate-down migrate-status run-frontend run-inngest run-auth run-studio proto-go run-speech

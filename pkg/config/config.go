@@ -26,6 +26,8 @@ type AppConfig struct {
 	LiveKit  LiveKitConfig
 	AWS      AWSConfig
 	Gemini   GeminiConfig
+	LLM      LLMConfig
+	Speech   SpeechConfig
 	LogLevel string
 	Env      string
 }
@@ -53,6 +55,23 @@ type GeminiConfig struct {
 	RealtimeModel string
 	ChatModel     string
 	APIKey        string
+}
+
+type LLMConfig struct {
+	Provider string // "ollama" or "gemini"
+	Host     string // Ollama host (e.g., "http://localhost:11434")
+	Model    string // Model name (e.g., "llama3.2", "qwen2.5")
+}
+
+type SpeechConfig struct {
+	Host string // gRPC host:port for Python speech service
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func LoadConfig() (*AppConfig, error) {
@@ -92,6 +111,14 @@ func LoadConfig() (*AppConfig, error) {
 			RealtimeModel: os.Getenv("GEMINI_REALTIME_MODEL"),
 			ChatModel:     os.Getenv("GEMINI_CHAT_MODEL"),
 			APIKey:        os.Getenv("GEMINI_API_KEY"),
+		},
+		Speech: SpeechConfig{
+			Host: getEnvOrDefault("SPEECH_SERVICE_HOST", "localhost:50051"),
+		},
+		LLM: LLMConfig{
+			Provider: getEnvOrDefault("LLM_PROVIDER", "ollama"),
+			Host:     getEnvOrDefault("LLM_HOST", "http://localhost:11434"),
+			Model:    getEnvOrDefault("LLM_MODEL", "llama3.2"),
 		},
 		LogLevel: "info",
 		Env:      os.Getenv("APP_ENV"),
