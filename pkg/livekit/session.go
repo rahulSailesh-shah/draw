@@ -25,7 +25,7 @@ import (
 
 type SessionCallbacks struct {
 	OnMeetingEnd  func(meetingID string, recordingURL string, transcriptURL string, err error)
-	OnLLMResponse func(boardID string, response *llm.CanvasResponse, err error)
+	OnLLMResponse func(boardID string, response *llm.LLMResponse, err error)
 	GetBoardState func(boardID string) (json.RawMessage, error)
 }
 
@@ -40,7 +40,7 @@ type LiveKitSession struct {
 	room            *lksdk.Room
 	handler         LivekitHandler
 	speechClient    *speech.Client
-	llmClient       *llm.Client
+	llmClient       llm.LLMClient
 	egressInfo      *livekit.EgressInfo
 	lkConfig        *config.LiveKitConfig
 	speechConfig    *config.SpeechConfig
@@ -69,7 +69,7 @@ func NewLiveKitSession(
 		return nil, fmt.Errorf("failed to create speech client: %w", err)
 	}
 
-	llmClient, err := llm.NewClient(&cfg.LLM)
+	llmClient, err := llm.NewLLMClient(llm.LLMProviderOllama)
 	if err != nil {
 		speechClient.Close()
 		cancel()
@@ -144,9 +144,9 @@ func (s *LiveKitSession) GenerateUserToken() (string, error) {
 	return token, nil
 }
 
-func (s *LiveKitSession) HandleMute() (string, error) {
+func (s *LiveKitSession) HandleMute() error {
 	if s.handler == nil {
-		return "", nil
+		return nil
 	}
 	return s.handler.OnMute()
 }
@@ -169,33 +169,27 @@ func (s *LiveKitSession) connectBot() error {
 		UserID:       s.userDetails.ID,
 		SpeechClient: s.speechClient,
 		LLMClient:    s.llmClient,
-		OnTranscribe: func(sessID string, transcription string, err error) {
+		OnLLMResponse: func( response *llm.LLMResponse, err error) {
 			if err != nil {
-				logger.Errorw("Transcription error", err, "sessionID", sessID)
-				return
-			}
-			fmt.Println("Transcription received", "sessionID", sessID, "transcription", transcription)
-		},
-		OnLLMResponse: func(sessID string, response *llm.CanvasResponse, err error) {
-			if err != nil {
-				logger.Errorw("LLM error", err, "sessionID", sessID)
+				logger.Errorw("LLM error", err)
 				if s.callbacks.OnLLMResponse != nil {
 					s.callbacks.OnLLMResponse(s.boardID, nil, err)
 				}
 				return
 			}
-			logger.Infow("LLM response", "sessionID", sessID, "explanation", response.Explanation)
 
-			// Stream response to client via text stream
-			s.textStreamQueue <- StreamTextData{
-				Type: "canvas_update",
-				Data: response,
+			jsonData, err := json.MarshalIndent(response, "", "  ")
+			if err != nil {
+				logger.Errorw("Failed to marshal LLM response", err)
+				return
 			}
 
-			// Call the callback
-			if s.callbacks.OnLLMResponse != nil {
-				s.callbacks.OnLLMResponse(s.boardID, response, nil)
-			}
+			fmt.Println("LLM response", string(jsonData))
+
+			// s.textStreamQueue <- StreamTextData{
+			// 	Type: "canvas_update",
+			// 	Data: response,
+			// }
 		},
 		GetBoardState: s.callbacks.GetBoardState,
 	})
@@ -252,11 +246,13 @@ func (s *LiveKitSession) callbacksForRoom() *lksdk.RoomCallback {
 				pcmRemoteTrack, _ = s.handleSubscribe(track)
 			},
 			OnTrackMuted: func(pub lksdk.TrackPublication, p lksdk.Participant) {
-				// Handle track mute - trigger transcription finalization
+				// Handle track mute - close transcription session
+				// Note: With VAD, transcriptions arrive automatically when silence is detected,
+				// so mute just closes the session cleanly
 				if pub.Kind() == lksdk.TrackKindAudio {
 					logger.Infow("Audio track muted", "participant", p.Identity())
 					go func() {
-						if _, err := s.HandleMute(); err != nil {
+						if err := s.HandleMute(); err != nil {
 							logger.Errorw("HandleMute failed", err)
 						}
 					}()

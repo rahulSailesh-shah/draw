@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-gRPC client test for Speech Service (STT only).
+gRPC client test for Speech Service (STT only) with VAD.
 
 This script tests the gRPC server by:
 1. Recording audio from the microphone
-2. Streaming it to the gRPC server
-3. Getting back the transcription
+2. Streaming it to the gRPC server (bidirectional streaming)
+3. Receiving transcriptions automatically when VAD detects silence
 
 Usage:
     # First start the server in another terminal:
@@ -17,7 +17,10 @@ Usage:
 
 import argparse
 import sys
+import threading
+import time
 from pathlib import Path
+from queue import Queue, Empty
 
 import grpc
 
@@ -33,16 +36,17 @@ except ImportError:
     sys.exit(1)
 
 
-def record_and_stream(stub, session_id: str, duration: float = 5.0) -> str:
+def record_and_stream(stub, session_id: str, duration: float = 10.0) -> list[str]:
     """
     Record audio from microphone and stream to gRPC server.
-    Returns transcription.
+    Receives transcriptions automatically when VAD detects silence.
+    Returns list of transcriptions (one per speech segment).
     """
     try:
         import pyaudio
     except ImportError:
         print("ERROR: pyaudio not installed. Install with: pip install pyaudio")
-        return ""
+        return []
     
     # Audio parameters matching what the server expects
     SAMPLE_RATE = 16000
@@ -51,6 +55,11 @@ def record_and_stream(stub, session_id: str, duration: float = 5.0) -> str:
     FORMAT = pyaudio.paInt16
     
     audio = pyaudio.PyAudio()
+    transcriptions = []
+    transcription_queue = Queue()
+    send_done = threading.Event()
+    receive_done = threading.Event()
+    error_occurred = threading.Event()
     
     def audio_generator():
         """Generate audio chunks for streaming."""
@@ -67,15 +76,20 @@ def record_and_stream(stub, session_id: str, duration: float = 5.0) -> str:
             total_chunks = int(SAMPLE_RATE / CHUNK_SIZE * duration)
             
             print(f"\n🎤 Recording for {duration}s... Speak now!")
+            print("   (Transcriptions will appear automatically when VAD detects silence)\n")
             
             for i in range(total_chunks):
+                if error_occurred.is_set():
+                    break
+                    
                 data = stream.read(CHUNK_SIZE, exception_on_overflow=False)
                 chunks_sent += 1
                 
                 # Progress indicator
                 progress = int((i / total_chunks) * 20)
                 bar = "█" * progress + "░" * (20 - progress)
-                print(f"\r   [{bar}] {i+1}/{total_chunks} chunks", end="", flush=True)
+                elapsed = (i * CHUNK_SIZE) / SAMPLE_RATE
+                print(f"\r   [{bar}] {elapsed:.1f}s/{duration:.1f}s", end="", flush=True)
                 
                 yield speech_pb2.TranscribeRequest(
                     session_id=session_id,
@@ -94,26 +108,80 @@ def record_and_stream(stub, session_id: str, duration: float = 5.0) -> str:
         finally:
             stream.stop_stream()
             stream.close()
+            send_done.set()
+    
+    def receive_transcriptions(stream):
+        """Receive transcriptions from the server."""
+        try:
+            for response in stream:
+                if response.success and response.transcription:
+                    transcription = response.transcription.strip()
+                    if transcription:
+                        transcriptions.append(transcription)
+                        transcription_queue.put(transcription)
+                        print(f"\n✅ [Transcription #{len(transcriptions)}]: {transcription}")
+                elif not response.success:
+                    error_msg = f"Transcription error: {response.error}"
+                    print(f"\n❌ {error_msg}")
+                    error_occurred.set()
+                    transcription_queue.put(None)
+                    
+        except grpc.RpcError as e:
+            print(f"\n❌ gRPC receive error: {e.code()} - {e.details()}")
+            error_occurred.set()
+        except Exception as e:
+            print(f"\n❌ Error receiving transcriptions: {e}")
+            error_occurred.set()
+        finally:
+            receive_done.set()
     
     try:
         print(f"\n{'='*60}")
-        print(f"Testing gRPC StreamTranscribe")
+        print(f"Testing gRPC StreamTranscribe (Bidirectional Streaming)")
         print(f"Session ID: {session_id}")
         print(f"{'='*60}")
         
-        response = stub.StreamTranscribe(audio_generator())
+        # Create bidirectional stream
+        stream = stub.StreamTranscribe(audio_generator())
         
-        if response.success:
-            print(f"\n✅ Transcription successful!")
-            print(f"   Result: {response.transcription}")
-            return response.transcription
+        # Start receiving transcriptions in background
+        receive_thread = threading.Thread(
+            target=receive_transcriptions,
+            args=(stream,),
+            daemon=True
+        )
+        receive_thread.start()
+        
+        # Wait for send to complete and receive to finish
+        send_done.wait(timeout=duration + 2)
+        
+        # Wait a bit more for any final transcriptions
+        receive_thread.join(timeout=3.0)
+        
+        if not receive_done.is_set():
+            print("\n⚠️  Receive thread did not finish cleanly")
+        
+        if transcriptions:
+            print(f"\n{'='*60}")
+            print(f"✅ Received {len(transcriptions)} transcription(s)")
+            print(f"{'='*60}")
+            for i, trans in enumerate(transcriptions, 1):
+                print(f"  {i}. {trans}")
         else:
-            print(f"\n❌ Transcription failed: {response.error}")
-            return ""
+            print(f"\n⚠️  No transcriptions received")
+            print("   This could mean:")
+            print("   - No speech was detected by VAD")
+            print("   - Speech was too short (< min_speech_duration)")
+            print("   - Silence threshold not met")
+        
+        return transcriptions
             
     except grpc.RpcError as e:
         print(f"\n❌ gRPC error: {e.code()} - {e.details()}")
-        return ""
+        return []
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        return []
     finally:
         audio.terminate()
 
@@ -138,7 +206,7 @@ def test_cleanup(stub, session_id: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test Speech Service (STT) gRPC server with microphone"
+        description="Test Speech Service (STT) gRPC server with microphone and VAD"
     )
     parser.add_argument(
         "--host",
@@ -161,8 +229,8 @@ def main():
     parser.add_argument(
         "--duration",
         type=float,
-        default=5.0,
-        help="Recording duration in seconds (default: 5)"
+        default=10.0,
+        help="Recording duration in seconds (default: 10)"
     )
     parser.add_argument(
         "--cleanup",
@@ -175,9 +243,11 @@ def main():
     address = f"{args.host}:{args.port}"
     
     print("\n" + "="*60)
-    print("  Speech Service (STT) - gRPC Client Test")
+    print("  Speech Service (STT) - gRPC Client Test with VAD")
     print(f"  Server: {address}")
     print("="*60)
+    print("\n💡 Note: Transcriptions arrive automatically when VAD detects silence")
+    print("   Speak naturally - pause between sentences to see transcriptions appear!")
     
     # Create gRPC channel and stub
     channel = grpc.insecure_channel(address)
@@ -195,16 +265,17 @@ def main():
         sys.exit(1)
     
     try:
-        # Test STT
-        transcription = record_and_stream(
+        # Test STT with VAD
+        transcriptions = record_and_stream(
             stub,
             session_id=args.session,
             duration=args.duration
         )
         
-        if transcription:
-            print(f"\n💡 To speak this text in the browser, use:")
-            print(f'   speechSynthesis.speak(new SpeechSynthesisUtterance("{transcription}"))')
+        if transcriptions:
+            print(f"\n💡 All transcriptions received:")
+            for i, trans in enumerate(transcriptions, 1):
+                print(f"   {i}. {trans}")
         
         # Optionally cleanup
         if args.cleanup:

@@ -4,11 +4,14 @@ grpcio-tools>=1.60.0
 protobuf>=4.25.0
 
 # Speech-to-Text
+faster-whisper>=1.0.0
+silero-vad>=5.0.0
 RealtimeSTT>=0.3.0
 
 # Audio processing
 pyaudio>=0.2.14
 numpy>=1.24.0
+torch>=2.0.0
 
 # Utilities
 python-dotenv>=1.0.0

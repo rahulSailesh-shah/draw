@@ -34,7 +34,7 @@ class SpeechServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.StreamTranscribe = channel.stream_unary(
+        self.StreamTranscribe = channel.stream_stream(
                 '/speech.SpeechService/StreamTranscribe',
                 request_serializer=speech__pb2.TranscribeRequest.SerializeToString,
                 response_deserializer=speech__pb2.TranscribeResponse.FromString,
@@ -64,7 +64,7 @@ class SpeechServiceServicer(object):
 
 def add_SpeechServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'StreamTranscribe': grpc.stream_unary_rpc_method_handler(
+            'StreamTranscribe': grpc.stream_stream_rpc_method_handler(
                     servicer.StreamTranscribe,
                     request_deserializer=speech__pb2.TranscribeRequest.FromString,
                     response_serializer=speech__pb2.TranscribeResponse.SerializeToString,
@@ -96,7 +96,7 @@ class SpeechService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_unary(
+        return grpc.experimental.stream_stream(
             request_iterator,
             target,
             '/speech.SpeechService/StreamTranscribe',

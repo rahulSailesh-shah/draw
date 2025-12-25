@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cspeech.proto\x12\x06speech\"S\n\x11TranscribeRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61udio_chunk\x18\x02 \x01(\x0c\x12\x15\n\rend_of_stream\x18\x03 \x01(\x08\"K\n\x12TranscribeResponse\x12\x15\n\rtranscription\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"$\n\x0e\x43leanupRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\"\n\x0f\x43leanupResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32\x9f\x01\n\rSpeechService\x12K\n\x10StreamTranscribe\x12\x19.speech.TranscribeRequest\x1a\x1a.speech.TranscribeResponse(\x01\x12\x41\n\x0e\x43leanupSession\x12\x16.speech.CleanupRequest\x1a\x17.speech.CleanupResponseB\x14Z\x12\x64raw/pkg/speech/pbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cspeech.proto\x12\x06speech\"S\n\x11TranscribeRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61udio_chunk\x18\x02 \x01(\x0c\x12\x15\n\rend_of_stream\x18\x03 \x01(\x08\"K\n\x12TranscribeResponse\x12\x15\n\rtranscription\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"$\n\x0e\x43leanupRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\"\n\x0f\x43leanupResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32\xa1\x01\n\rSpeechService\x12M\n\x10StreamTranscribe\x12\x19.speech.TranscribeRequest\x1a\x1a.speech.TranscribeResponse(\x01\x30\x01\x12\x41\n\x0e\x43leanupSession\x12\x16.speech.CleanupRequest\x1a\x17.speech.CleanupResponseB\x14Z\x12\x64raw/pkg/speech/pbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,5 +41,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CLEANUPRESPONSE']._serialized_start=224
   _globals['_CLEANUPRESPONSE']._serialized_end=258
   _globals['_SPEECHSERVICE']._serialized_start=261
-  _globals['_SPEECHSERVICE']._serialized_end=420
+  _globals['_SPEECHSERVICE']._serialized_end=422
 # @@protoc_insertion_point(module_scope)

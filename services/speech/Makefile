@@ -38,7 +38,7 @@ test-session:
 
 # Test gRPC client (requires server running in another terminal)
 test-grpc: proto
-	$(PYTHON) -m tests.test_grpc_client --duration 5 --cleanup
+	$(PYTHON) -m tests.test_grpc_client --duration 20 --cleanup
 
 # Clean generated files
 clean:

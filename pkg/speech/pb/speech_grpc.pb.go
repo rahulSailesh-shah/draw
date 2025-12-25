@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SpeechServiceClient interface {
-	StreamTranscribe(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[TranscribeRequest, TranscribeResponse], error)
+	StreamTranscribe(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TranscribeRequest, TranscribeResponse], error)
 	CleanupSession(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error)
 }
 
@@ -39,7 +39,7 @@ func NewSpeechServiceClient(cc grpc.ClientConnInterface) SpeechServiceClient {
 	return &speechServiceClient{cc}
 }
 
-func (c *speechServiceClient) StreamTranscribe(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[TranscribeRequest, TranscribeResponse], error) {
+func (c *speechServiceClient) StreamTranscribe(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TranscribeRequest, TranscribeResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &SpeechService_ServiceDesc.Streams[0], SpeechService_StreamTranscribe_FullMethodName, cOpts...)
 	if err != nil {
@@ -50,7 +50,7 @@ func (c *speechServiceClient) StreamTranscribe(ctx context.Context, opts ...grpc
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SpeechService_StreamTranscribeClient = grpc.ClientStreamingClient[TranscribeRequest, TranscribeResponse]
+type SpeechService_StreamTranscribeClient = grpc.BidiStreamingClient[TranscribeRequest, TranscribeResponse]
 
 func (c *speechServiceClient) CleanupSession(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -66,7 +66,7 @@ func (c *speechServiceClient) CleanupSession(ctx context.Context, in *CleanupReq
 // All implementations must embed UnimplementedSpeechServiceServer
 // for forward compatibility.
 type SpeechServiceServer interface {
-	StreamTranscribe(grpc.ClientStreamingServer[TranscribeRequest, TranscribeResponse]) error
+	StreamTranscribe(grpc.BidiStreamingServer[TranscribeRequest, TranscribeResponse]) error
 	CleanupSession(context.Context, *CleanupRequest) (*CleanupResponse, error)
 	mustEmbedUnimplementedSpeechServiceServer()
 }
@@ -78,7 +78,7 @@ type SpeechServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpeechServiceServer struct{}
 
-func (UnimplementedSpeechServiceServer) StreamTranscribe(grpc.ClientStreamingServer[TranscribeRequest, TranscribeResponse]) error {
+func (UnimplementedSpeechServiceServer) StreamTranscribe(grpc.BidiStreamingServer[TranscribeRequest, TranscribeResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamTranscribe not implemented")
 }
 func (UnimplementedSpeechServiceServer) CleanupSession(context.Context, *CleanupRequest) (*CleanupResponse, error) {
@@ -110,7 +110,7 @@ func _SpeechService_StreamTranscribe_Handler(srv interface{}, stream grpc.Server
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SpeechService_StreamTranscribeServer = grpc.ClientStreamingServer[TranscribeRequest, TranscribeResponse]
+type SpeechService_StreamTranscribeServer = grpc.BidiStreamingServer[TranscribeRequest, TranscribeResponse]
 
 func _SpeechService_CleanupSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CleanupRequest)
@@ -146,6 +146,7 @@ var SpeechService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamTranscribe",
 			Handler:       _SpeechService_StreamTranscribe_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},

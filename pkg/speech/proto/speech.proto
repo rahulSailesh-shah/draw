@@ -5,7 +5,7 @@ package speech;
 option go_package = "draw/pkg/speech/pb";
 
 service SpeechService {
-  rpc StreamTranscribe(stream TranscribeRequest) returns (TranscribeResponse);
+  rpc StreamTranscribe(stream TranscribeRequest) returns (stream TranscribeResponse);
   rpc CleanupSession(CleanupRequest) returns (CleanupResponse);
 }
 

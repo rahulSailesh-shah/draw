@@ -39,27 +39,72 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// TranscriptionCallback is called whenever a transcription is received from the server.
+type TranscriptionCallback func(transcription string, err error)
+
 type TranscribeSession struct {
-	client    pb.SpeechServiceClient
-	sessionID string
-	stream    pb.SpeechService_StreamTranscribeClient
-	mu        sync.Mutex
-	started   bool
-	closed    bool
+	client              pb.SpeechServiceClient
+	sessionID           string
+	stream              pb.SpeechService_StreamTranscribeClient
+	mu                  sync.Mutex
+	started             bool
+	closed              bool
+	transcriptionCallback TranscriptionCallback
+	receiveDone         chan struct{}
+	receiveErr          error
 }
 
-func (c *Client) NewTranscribeSession(ctx context.Context, sessionID string) (*TranscribeSession, error) {
+func (c *Client) NewTranscribeSession(ctx context.Context, sessionID string, callback TranscriptionCallback) (*TranscribeSession, error) {
 	stream, err := c.client.StreamTranscribe(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transcribe stream: %w", err)
 	}
 
-	return &TranscribeSession{
-		client:    c.client,
-		sessionID: sessionID,
-		stream:    stream,
-		started:   true,
-	}, nil
+	session := &TranscribeSession{
+		client:              c.client,
+		sessionID:           sessionID,
+		stream:              stream,
+		started:             true,
+		transcriptionCallback: callback,
+		receiveDone:         make(chan struct{}),
+	}
+
+	go session.receiveTranscriptions()
+
+	return session, nil
+}
+
+func (s *TranscribeSession) receiveTranscriptions() {
+	defer close(s.receiveDone)
+
+	fmt.Println("Receiving transcriptions")
+
+	for {
+		resp, err := s.stream.Recv()
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			s.mu.Lock()
+			s.receiveErr = err
+			s.mu.Unlock()
+			if s.transcriptionCallback != nil {
+				s.transcriptionCallback("", fmt.Errorf("failed to receive transcription: %w", err))
+			}
+			return
+		}
+
+		if resp.Success {
+			if s.transcriptionCallback != nil {
+				s.transcriptionCallback(resp.Transcription, nil)
+			}
+		} else {
+			err := fmt.Errorf("transcription failed: %s", resp.Error)
+			if s.transcriptionCallback != nil {
+				s.transcriptionCallback("", err)
+			}
+		}
+	}
 }
 
 func (s *TranscribeSession) SendAudio(audioChunk []byte) error {
@@ -77,12 +122,12 @@ func (s *TranscribeSession) SendAudio(audioChunk []byte) error {
 	})
 }
 
-func (s *TranscribeSession) Finalize() (string, error) {
+func (s *TranscribeSession) Finalize() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.closed {
-		return "", fmt.Errorf("session is closed")
+		return fmt.Errorf("session is closed")
 	}
 
 	if err := s.stream.Send(&pb.TranscribeRequest{
@@ -90,24 +135,22 @@ func (s *TranscribeSession) Finalize() (string, error) {
 		AudioChunk:  nil,
 		EndOfStream: true,
 	}); err != nil {
-		return "", fmt.Errorf("failed to send end-of-stream: %w", err)
+		return fmt.Errorf("failed to send end-of-stream: %w", err)
 	}
 
-	resp, err := s.stream.CloseAndRecv()
-	if err != nil {
-		if err == io.EOF {
-			return "", fmt.Errorf("stream closed without response")
-		}
-		return "", fmt.Errorf("failed to receive transcription: %w", err)
+	if err := s.stream.CloseSend(); err != nil {
+		return fmt.Errorf("failed to close send: %w", err)
 	}
 
 	s.closed = true
 
-	if !resp.Success {
-		return "", fmt.Errorf("transcription failed: %s", resp.Error)
+	<-s.receiveDone
+
+	if s.receiveErr != nil && s.receiveErr != io.EOF {
+		return fmt.Errorf("receive error: %w", s.receiveErr)
 	}
 
-	return resp.Transcription, nil
+	return nil
 }
 
 func (s *TranscribeSession) Close() error {
@@ -119,7 +162,17 @@ func (s *TranscribeSession) Close() error {
 	}
 
 	s.closed = true
-	return s.stream.CloseSend()
+
+	if err := s.stream.CloseSend(); err != nil {
+		return err
+	}
+
+	select {
+	case <-s.receiveDone:
+		return nil
+	default:
+		return nil
+	}
 }
 
 func (c *Client) CleanupSession(ctx context.Context, sessionID string) error {
@@ -136,4 +189,3 @@ func (c *Client) CleanupSession(ctx context.Context, sessionID string) error {
 
 	return nil
 }
-
