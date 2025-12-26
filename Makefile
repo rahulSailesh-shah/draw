@@ -70,7 +70,7 @@ run-auth:
 
 make run-studio:
 	@echo "Starting studio..."
-	@cd packages/auth && bun run db:studio
+	@cd services/auth && bun run db:studio
 
 # Proto generation for Go (speech service)
 proto-go:

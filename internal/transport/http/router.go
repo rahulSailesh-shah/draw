@@ -40,4 +40,6 @@ func RegisterRoutes(r *gin.Engine, authKeys jwk.Set, app *app.App) {
 
 	boardHandler := handler.NewBoardHandler(app.Service.BoardService)
 	protected.POST("/boards", boardHandler.CreateBoard)
+	protected.GET("/boards/:id", boardHandler.GetBoard)
+	protected.PUT("/boards/:id", boardHandler.UpdateBoard)
 }

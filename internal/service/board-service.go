@@ -14,7 +14,9 @@ import (
 )
 
 type BoardService interface {
-	CreateBoard(ctx context.Context, request dto.CreateBoardRequest) (*dto.CreateBoardResponse, error)
+	CreateBoard(ctx context.Context, req dto.CreateBoardRequest) (*dto.CreateBoardResponse, error)
+	GetBoard(ctx context.Context, req dto.GetBoardRequest) (*dto.GetBoardResponse, error)
+	UpdateBoard(ctx context.Context, req dto.UpdateBoardRequest) (*dto.GetBoardResponse, error)
 }
 
 type boardService struct {
@@ -36,17 +38,24 @@ func NewBoardService(
 }
 
 
-func (s *boardService) CreateBoard(ctx context.Context, request dto.CreateBoardRequest) (*dto.CreateBoardResponse, error) {
-	userDetails, err := s.queries.GetUserByID(ctx, request.UserID)
+func (s *boardService) CreateBoard(ctx context.Context, req dto.CreateBoardRequest) (*dto.CreateBoardResponse, error) {
+	board, err := s.queries.CreateBoard(ctx, repo.CreateBoardParams{
+		Name: req.Name,
+		OwnerID: req.UserID,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create board: %w", err)
+	}
+
+	userDetails, err := s.queries.GetUserByID(ctx, req.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	boardID := uuid.New().String()
-
 	session, err := livekit.NewLiveKitSession(
 		&userDetails,
-		boardID,
+		board.ID.String(),
 		s.config,
 		livekit.SessionCallbacks{},
 	)
@@ -62,7 +71,62 @@ func (s *boardService) CreateBoard(ctx context.Context, request dto.CreateBoardR
 	}
 
 	return &dto.CreateBoardResponse{
-		ID:    boardID,
+		BoardID: board.ID,
 		Token: token,
 	}, nil
+}
+
+
+func (s *boardService) GetBoard(ctx context.Context, req dto.GetBoardRequest) (*dto.GetBoardResponse, error) {
+	board, err := s.queries.GetBoardByID(ctx, repo.GetBoardByIDParams{
+		ID:     uuid.MustParse(req.BoardID),
+		OwnerID: req.UserID,
+	})	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get board: %w", err)	
+	}
+	return &dto.GetBoardResponse{
+		Board: toBoardResponse(board),
+	}, nil
+}
+
+
+func (s *boardService) UpdateBoard(ctx context.Context, req dto.UpdateBoardRequest) (*dto.GetBoardResponse, error) {
+	currentBoard, err := s.queries.GetBoardByID(ctx, repo.GetBoardByIDParams{
+		ID: uuid.MustParse(req.BoardID),
+		OwnerID: req.UserID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get board: %w", err)
+	}
+
+	if req.Name != "" {
+		currentBoard.Name = req.Name
+	}
+	if req.Elements != nil {
+		currentBoard.Elements = req.Elements
+	}
+
+	board, err := s.queries.UpdateBoard(ctx, repo.UpdateBoardParams{
+		ID: currentBoard.ID,
+		Name: currentBoard.Name,
+		Elements: currentBoard.Elements,
+		OwnerID: req.UserID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update board: %w", err)
+	}
+
+	return &dto.GetBoardResponse{
+		Board: toBoardResponse(board),
+	}, nil
+}
+
+func toBoardResponse(board repo.Board) dto.Board {
+	return dto.Board{
+		ID: board.ID,
+		Name: board.Name,
+		OwnerID: board.OwnerID,
+		Elements: board.Elements,
+	}
 }

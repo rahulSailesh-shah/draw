@@ -5,8 +5,20 @@
 package repo
 
 import (
+	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+type Board struct {
+	ID        uuid.UUID       `db:"id" json:"id"`
+	Name      string          `db:"name" json:"name"`
+	OwnerID   string          `db:"owner_id" json:"ownerId"`
+	Elements  json.RawMessage `db:"elements" json:"elements"`
+	CreatedAt time.Time       `db:"created_at" json:"createdAt"`
+	UpdatedAt time.Time       `db:"updated_at" json:"updatedAt"`
+}
 
 type User struct {
 	ID            string    `db:"id" json:"id"`

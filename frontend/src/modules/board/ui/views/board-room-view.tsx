@@ -1,16 +1,18 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2Icon } from "lucide-react";
-import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
-import { DraggableControlsLayout } from "../components/draggable-controls-layout";
 import "@livekit/components-styles";
 import { Whiteboard, type WhiteboardStateChange } from "./whiteboard";
+import type { Board } from "../../types";
+
+import { DraggableControlsLayout } from "../components/draggable-controls-layout";
+import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
 
 const SERVER_URL = "wss://conversense-z0ptqzuw.livekit.cloud";
 
 export interface BoardRoomViewProps {
-  boardId: string;
+  board: Board;
 }
 
 const MuteOnJoin = () => {
@@ -40,7 +42,7 @@ const MuteOnJoin = () => {
   return null;
 };
 
-export const BoardRoomView = ({ boardId }: BoardRoomViewProps) => {
+export const BoardRoomView = ({ board }: BoardRoomViewProps) => {
   const navigate = useNavigate();
   const [token, setToken] = useState<string | null>(null);
 
@@ -70,7 +72,7 @@ export const BoardRoomView = ({ boardId }: BoardRoomViewProps) => {
 
   return (
     <div className="h-screen w-screen relative bg-white">
-      <Whiteboard boardId={boardId} onStateChange={handleStateChange} />
+      <Whiteboard board={board} onStateChange={handleStateChange} />
       {/* 
       <LiveKitRoom
         className="h-full w-full relative"
