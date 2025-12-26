@@ -2,6 +2,7 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import type {
   CreateBoardResponse,
   GetBoardResponse,
+  GetBoardsByUserIDResponse,
   UpdateBoardRequest,
 } from "./types";
 
@@ -13,6 +14,15 @@ export const getBoard = async (id: string) => {
   const { data, error, status } = await apiClient.get<GetBoardResponse>(
     `/boards/${id}`
   );
+  if (error) {
+    handleApiError(error, status);
+  }
+  return data;
+};
+
+export const getBoards = async () => {
+  const { data, error, status } =
+    await apiClient.get<GetBoardsByUserIDResponse>("/boards");
   if (error) {
     handleApiError(error, status);
   }

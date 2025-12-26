@@ -62,6 +62,24 @@ func (h *BoardHandler) GetBoard(c *gin.Context) {
 	})
 }
 
+func (h *BoardHandler) GetBoardsByUserID(c *gin.Context) {
+	userId := c.MustGet("userId").(string)
+	boards, err := h.boardService.GetBoardsByUserID(c.Request.Context(), dto.GetBoardsByUserIDRequest{
+		UserID: userId,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Message: "Failed to get boards",
+			Error:   err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, dto.SuccessResponse{
+		Message: "Boards fetched",
+		Data:    boards,
+	})
+}
+
 func (h *BoardHandler) UpdateBoard(c *gin.Context) {
 	var req dto.UpdateBoardRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

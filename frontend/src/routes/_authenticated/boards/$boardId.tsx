@@ -17,7 +17,7 @@ function RouteComponent() {
       <QueryBoundary query={boardQuery}>
         {(data: GetBoardResponse) => (
           <>
-            <BoardRoomView board={data.board} />
+            <BoardRoomView board={data.board} token={data.token} />
           </>
         )}
       </QueryBoundary>

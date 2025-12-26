@@ -21,6 +21,10 @@ type GetBoardRequest struct {
 	UserID string `json:"-"`
 }
 
+type GetBoardsByUserIDRequest struct {
+	UserID string `json:"-"`
+}
+
 type CreateBoardRequest struct {
 	UserID string `json:"-"`
 	Name string `json:"name" binding:"required"`
@@ -36,9 +40,13 @@ type UpdateBoardRequest struct {
 // Response
 type CreateBoardResponse struct {
 	BoardID uuid.UUID `json:"boardId"`
-	Token string `json:"token"`
 }
 
 type GetBoardResponse struct {
 	Board Board `json:"board"`
+	Token string `json:"token"`
+}
+
+type GetBoardsByUserIDResponse struct {
+	Boards []Board `json:"boards"`
 }

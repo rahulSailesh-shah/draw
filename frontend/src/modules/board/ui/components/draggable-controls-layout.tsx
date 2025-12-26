@@ -9,9 +9,7 @@ import {
   useRoomContext,
 } from "@livekit/components-react";
 
-export interface DraggableControlsLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
-  meetingId: string;
-}
+export interface DraggableControlsLayoutProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 // Sentiment analysis result
 export interface SentimentData {
@@ -43,8 +41,8 @@ const useDraggable = (initialPosition = { x: 0, y: 0 }) => {
   const [position, setPosition] = React.useState(() => {
     if (typeof window !== "undefined") {
       return {
-        x: window.innerWidth - window.innerWidth * 0.3,
-        y: 16,
+        x: window.innerWidth - 100,
+        y: 0,
       };
     }
     return initialPosition;
@@ -124,10 +122,13 @@ const useDraggable = (initialPosition = { x: 0, y: 0 }) => {
       // Constrain to viewport bounds
       const maxX = window.innerWidth - rect.width;
       const maxY = window.innerHeight - rect.height;
+      
+      // Minimum top position to prevent toolbar from going above viewport
+      const minY = 0;
 
       setPosition({
         x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY)),
+        y: Math.max(minY, Math.min(newY, maxY)),
       });
     };
 
@@ -145,10 +146,13 @@ const useDraggable = (initialPosition = { x: 0, y: 0 }) => {
       // Constrain to viewport bounds
       const maxX = window.innerWidth - rect.width;
       const maxY = window.innerHeight - rect.height;
+      
+      // Minimum top position to prevent toolbar from going above viewport
+      const minY = 0;
 
       setPosition({
         x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY)),
+        y: Math.max(minY, Math.min(newY, maxY)),
       });
     };
 
@@ -180,7 +184,6 @@ const useDraggable = (initialPosition = { x: 0, y: 0 }) => {
 };
 
 export const DraggableControlsLayout = ({
-  meetingId,
   ...props
 }: DraggableControlsLayoutProps) => {
   const room = useRoomContext();
@@ -201,6 +204,53 @@ export const DraggableControlsLayout = ({
     handleMouseDown,
     handleTouchStart,
   } = useDraggable();
+
+  // Ensure toolbar stays visible and fixed when Excalidraw changes layout
+  React.useEffect(() => {
+    if (!dragRef.current) return;
+
+    const element = dragRef.current;
+    
+    const ensureFixedPosition = () => {
+      // Force fixed positioning relative to viewport, not affected by parent transforms
+      const computedStyle = window.getComputedStyle(element);
+      if (computedStyle.position !== 'fixed') {
+        element.style.position = 'fixed';
+      }
+      
+      // Ensure toolbar doesn't go above viewport
+      const rect = element.getBoundingClientRect();
+      if (rect.top < 0) {
+        element.style.top = '0px';
+      }
+    };
+
+    // Use MutationObserver to detect when Excalidraw changes the DOM
+    const observer = new MutationObserver(() => {
+      ensureFixedPosition();
+    });
+
+    // Observe changes to the document body and Excalidraw containers
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+    });
+
+    // Also check on resize and scroll
+    window.addEventListener('resize', ensureFixedPosition);
+    window.addEventListener('scroll', ensureFixedPosition, true);
+
+    // Initial check
+    ensureFixedPosition();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', ensureFixedPosition);
+      window.removeEventListener('scroll', ensureFixedPosition, true);
+    };
+  }, [dragRef]);
 
   React.useEffect(() => {
     try {
@@ -284,12 +334,14 @@ export const DraggableControlsLayout = ({
     <>
       <div
         ref={dragRef}
-        className="draggable-controls-container fixed z-50 bg-white rounded-lg shadow-lg px-3 py-2 overflow-visible border border-gray-200/50 flex flex-row items-center gap-2 select-none"
+        className="draggable-controls-container fixed z-[9999] bg-white rounded-lg shadow-lg px-3 py-2 overflow-visible border border-gray-200/50 flex flex-row items-center gap-2 select-none"
         style={{
-          top: `${position.y}px`,
+          top: `${Math.max(0, position.y)}px`,
           left: `${position.x}px`,
           transform: !hasBeenDragged ? "translateX(-50%)" : "none",
           cursor: isDragging ? "grabbing" : "move",
+          position: "fixed",
+          willChange: "transform",
         }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}

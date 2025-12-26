@@ -16,6 +16,7 @@ import (
 type BoardService interface {
 	CreateBoard(ctx context.Context, req dto.CreateBoardRequest) (*dto.CreateBoardResponse, error)
 	GetBoard(ctx context.Context, req dto.GetBoardRequest) (*dto.GetBoardResponse, error)
+	GetBoardsByUserID(ctx context.Context, req dto.GetBoardsByUserIDRequest) (*dto.GetBoardsByUserIDResponse, error)
 	UpdateBoard(ctx context.Context, req dto.UpdateBoardRequest) (*dto.GetBoardResponse, error)
 }
 
@@ -48,6 +49,21 @@ func (s *boardService) CreateBoard(ctx context.Context, req dto.CreateBoardReque
 		return nil, fmt.Errorf("failed to create board: %w", err)
 	}
 
+	return &dto.CreateBoardResponse{
+		BoardID: board.ID,
+
+	}, nil
+}
+
+func (s *boardService) GetBoard(ctx context.Context, req dto.GetBoardRequest) (*dto.GetBoardResponse, error) {
+	board, err := s.queries.GetBoardByID(ctx, repo.GetBoardByIDParams{
+		ID:     uuid.MustParse(req.BoardID),
+		OwnerID: req.UserID,
+	})	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get board: %w", err)	
+	}
+
 	userDetails, err := s.queries.GetUserByID(ctx, req.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -70,26 +86,25 @@ func (s *boardService) CreateBoard(ctx context.Context, req dto.CreateBoardReque
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	return &dto.CreateBoardResponse{
-		BoardID: board.ID,
+	return &dto.GetBoardResponse{
+		Board: toBoardResponse(board),
 		Token: token,
 	}, nil
 }
 
-
-func (s *boardService) GetBoard(ctx context.Context, req dto.GetBoardRequest) (*dto.GetBoardResponse, error) {
-	board, err := s.queries.GetBoardByID(ctx, repo.GetBoardByIDParams{
-		ID:     uuid.MustParse(req.BoardID),
-		OwnerID: req.UserID,
-	})	
+func (s *boardService) GetBoardsByUserID(ctx context.Context, req dto.GetBoardsByUserIDRequest) (*dto.GetBoardsByUserIDResponse, error) {
+	boards, err := s.queries.GetBoardsByUserID(ctx, req.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get board: %w", err)	
+		return nil, fmt.Errorf("failed to get boards: %w", err)
 	}
-	return &dto.GetBoardResponse{
-		Board: toBoardResponse(board),
+	boardsResponse := make([]dto.Board, 0, len(boards))
+	for _, board := range boards {
+		boardsResponse = append(boardsResponse, toBoardResponse(board))
+	}
+	return &dto.GetBoardsByUserIDResponse{
+		Boards: boardsResponse,
 	}, nil
 }
-
 
 func (s *boardService) UpdateBoard(ctx context.Context, req dto.UpdateBoardRequest) (*dto.GetBoardResponse, error) {
 	currentBoard, err := s.queries.GetBoardByID(ctx, repo.GetBoardByIDParams{

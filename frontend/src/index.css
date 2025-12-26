@@ -337,3 +337,74 @@
 .draggable-controls-container .lk-device-menu * {
   color: inherit !important;
 }
+
+/* Ensure draggable controls stay above Excalidraw UI */
+.draggable-controls-container {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+  position: fixed !important;
+  transform-origin: center center !important;
+  isolation: isolate !important;
+  contain: layout style paint !important;
+}
+
+/* Prevent Excalidraw overlays from covering the toolbar */
+.excalidraw-container .excalidraw-modal-container,
+.excalidraw-container .excalidraw-modal-overlay,
+.excalidraw-container .popover,
+.excalidraw-container [class*="modal"],
+.excalidraw-container [class*="overlay"],
+.excalidraw-container [class*="Modal"],
+.excalidraw-container [class*="Overlay"] {
+  z-index: 9998 !important;
+}
+
+/* Ensure Excalidraw toolbar stays below board header */
+.excalidraw-wrapper .excalidraw-container {
+  height: 100% !important;
+}
+
+/* Target Excalidraw's toolbar - adjust top position to account for header */
+.excalidraw-wrapper .excalidraw-container [class*="Toolbar"],
+.excalidraw-wrapper .excalidraw-container [class*="toolbar"],
+.excalidraw-wrapper .excalidraw-container .excalidraw-toolbar,
+.excalidraw-wrapper .excalidraw-container [data-testid*="toolbar"] {
+  top: 3.5rem !important; /* Height of board header (h-14 = 3.5rem) */
+  z-index: 40 !important;
+}
+
+/* Ensure Excalidraw's UI elements that are fixed at top account for header */
+.excalidraw-wrapper .excalidraw-container .excalidraw [style*="position: fixed"] {
+  top: 3.5rem !important;
+}
+
+/* Ensure Excalidraw's main container accounts for header space */
+.excalidraw-wrapper .excalidraw-container .excalidraw {
+  padding-top: 3.5rem !important;
+  height: 100% !important;
+}
+
+/* Prevent Excalidraw from affecting body scroll or viewport */
+.excalidraw-container {
+  overflow: visible !important;
+}
+
+/* Ensure body doesn't get transformed by Excalidraw */
+body:has(.excalidraw-container) {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Ensure Excalidraw toolbar doesn't interfere */
+.excalidraw-container .ToolIcon {
+  z-index: auto !important;
+}
+
+/* Prevent Excalidraw from creating full-screen overlays that cover everything */
+.excalidraw-container .excalidraw-modal-overlay {
+  pointer-events: none !important;
+}
+
+.excalidraw-container .excalidraw-modal-overlay > * {
+  pointer-events: auto !important;
+}

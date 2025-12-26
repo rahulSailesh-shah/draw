@@ -72,6 +72,37 @@ func (q *Queries) GetBoardByID(ctx context.Context, arg GetBoardByIDParams) (Boa
 	return i, err
 }
 
+const getBoardsByUserID = `-- name: GetBoardsByUserID :many
+SELECT id, name, owner_id, elements, created_at, updated_at FROM "board" WHERE owner_id = $1
+`
+
+func (q *Queries) GetBoardsByUserID(ctx context.Context, ownerID string) ([]Board, error) {
+	rows, err := q.db.Query(ctx, getBoardsByUserID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Board{}
+	for rows.Next() {
+		var i Board
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.Elements,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateBoard = `-- name: UpdateBoard :one
 UPDATE "board" SET name = $2, elements = $3 WHERE id = $1 AND owner_id = $4 RETURNING id, name, owner_id, elements, created_at, updated_at
 `

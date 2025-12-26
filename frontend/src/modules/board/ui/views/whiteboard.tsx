@@ -5,6 +5,8 @@ import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import { useDebouncedCallback } from "@/lib/use-debounced-callback";
 import BoardHeader from "./board-header";
 import type { Board } from "../../types";
+import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
+import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
 export interface WhiteboardStateChange {
   elements: readonly ExcalidrawElement[];
@@ -25,10 +27,105 @@ type ExcalidrawAPI = Parameters<
   NonNullable<React.ComponentProps<typeof Excalidraw>["excalidrawAPI"]>
 >[0];
 
-export const Whiteboard = ({ board, onStateChange }: WhiteboardProps) => {
-  const initialElements = convertToExcalidrawElements([], {
-    regenerateIds: false,
+export function convertFromExcalidrawElements(
+  elements: readonly ExcalidrawElement[]
+): Record<string, any>[] {
+  const activeElements = elements.filter((el) => !el.isDeleted);
+
+  return activeElements.map((element) => {
+    const baseCommand: Record<string, any> = {
+      type: element.type,
+      id: element.id,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+    };
+
+    if (element.angle !== undefined && element.angle !== 0) {
+      baseCommand.angle = element.angle;
+    }
+    if (element.strokeColor) {
+      baseCommand.strokeColor = element.strokeColor;
+    }
+    if (element.backgroundColor && element.backgroundColor !== "transparent") {
+      baseCommand.backgroundColor = element.backgroundColor;
+    }
+    if (element.fillStyle) {
+      baseCommand.fillStyle = element.fillStyle;
+    }
+    if (element.strokeWidth !== undefined) {
+      baseCommand.strokeWidth = element.strokeWidth;
+    }
+    if (element.strokeStyle) {
+      baseCommand.strokeStyle = element.strokeStyle;
+    }
+    if (element.roughness !== undefined) {
+      baseCommand.roughness = element.roughness;
+    }
+    if (element.opacity !== undefined && element.opacity !== 100) {
+      baseCommand.opacity = element.opacity;
+    }
+    if (element.roundness !== null && element.roundness !== undefined) {
+      baseCommand.roundness = element.roundness;
+    }
+    if (element.locked !== undefined) {
+      baseCommand.locked = element.locked;
+    }
+    if (element.link) {
+      baseCommand.link = element.link;
+    }
+
+    if (element.type === "arrow") {
+      // Convert startBinding/endBinding to start/end format
+      if ((element as any).startBinding?.elementId) {
+        baseCommand.start = {
+          id: (element as any).startBinding.elementId,
+        };
+      }
+      if ((element as any).endBinding?.elementId) {
+        baseCommand.end = {
+          id: (element as any).endBinding.elementId,
+        };
+      }
+
+      // Preserve label if it exists
+      if ((element as any).label?.text) {
+        baseCommand.label = {
+          text: (element as any).label.text,
+        };
+        if ((element as any).label.strokeColor) {
+          baseCommand.label.strokeColor = (element as any).label.strokeColor;
+        }
+      }
+
+      // Preserve arrowhead styles if they exist
+      if ((element as any).startArrowhead) {
+        baseCommand.startArrowhead = (element as any).startArrowhead;
+      }
+      if ((element as any).endArrowhead) {
+        baseCommand.endArrowhead = (element as any).endArrowhead;
+      }
+    } else {
+      if (element.boundElements && element.boundElements.length > 0) {
+        baseCommand.boundElements = element.boundElements.map((bound) => ({
+          id: bound.id,
+          type: bound.type,
+        }));
+      }
+    }
+
+    return baseCommand;
   });
+}
+
+export const Whiteboard = ({ board, onStateChange }: WhiteboardProps) => {
+  const boardElements = (board.elements ?? []) as ExcalidrawElementSkeleton[];
+
+  const initialElements: OrderedExcalidrawElement[] =
+    convertToExcalidrawElements(boardElements, {
+      regenerateIds: false,
+    });
 
   const excalidrawAPI = useRef<ExcalidrawAPI | null>(null);
   const previousElementsRef =
@@ -120,17 +217,20 @@ export const Whiteboard = ({ board, onStateChange }: WhiteboardProps) => {
   }, []);
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative flex flex-col">
       <BoardHeader boardId={board.id} boardName={board.name} />
-      <Excalidraw
-        excalidrawAPI={handleAPI}
-        onChange={handleChange}
-        initialData={{
-          elements,
-          appState: { zenModeEnabled: true, viewBackgroundColor: "#a5d8ff" },
-          scrollToContent: true,
-        }}
-      />
+      <div
+        className="flex-1 relative"
+        style={{ height: "calc(100% - 3.5rem)" }}
+      >
+        <div className="excalidraw-wrapper" style={{ height: "100%" }}>
+          <Excalidraw
+            excalidrawAPI={handleAPI}
+            onChange={handleChange}
+            initialData={{ elements, appState: { theme: "light" } }}
+          />
+        </div>
+      </div>
     </div>
   );
 };

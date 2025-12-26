@@ -1,18 +1,22 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Loader2Icon } from "lucide-react";
+import { useEffect } from "react";
 import { RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Whiteboard, type WhiteboardStateChange } from "./whiteboard";
+import {
+  Whiteboard,
+  type WhiteboardStateChange,
+  convertFromExcalidrawElements,
+} from "./whiteboard";
 import type { Board } from "../../types";
-
 import { DraggableControlsLayout } from "../components/draggable-controls-layout";
 import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
+import { useMutationUpdateBoard } from "../../hooks/use-board";
 
 const SERVER_URL = "wss://conversense-z0ptqzuw.livekit.cloud";
 
 export interface BoardRoomViewProps {
   board: Board;
+  token: string;
 }
 
 const MuteOnJoin = () => {
@@ -42,38 +46,30 @@ const MuteOnJoin = () => {
   return null;
 };
 
-export const BoardRoomView = ({ board }: BoardRoomViewProps) => {
+export const BoardRoomView = ({ board, token }: BoardRoomViewProps) => {
   const navigate = useNavigate();
-  const [token, setToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    const storedToken = sessionStorage.getItem(`room-token`);
-    if (!storedToken) {
-      navigate({
-        to: "/boards",
-        replace: true,
-      });
-      return;
-    }
-    setToken(storedToken);
-  }, [navigate]);
+  const { mutate: updateBoardMutation } = useMutationUpdateBoard();
 
   if (!token) {
     return (
       <div className="flex flex-col items-center justify-center h-screen w-screen bg-white">
-        <Loader2Icon className="size-12 animate-spin" />
+        Something went wrong. Please try again.
       </div>
     );
   }
 
   const handleStateChange = (state: WhiteboardStateChange) => {
-    console.log("state", state);
+    const commands = convertFromExcalidrawElements(state.elements);
+    updateBoardMutation({
+      id: board.id.toString(),
+      req: {
+        elements: commands,
+      },
+    });
   };
 
   return (
-    <div className="h-screen w-screen relative bg-white">
-      <Whiteboard board={board} onStateChange={handleStateChange} />
-      {/* 
+    <div className="h-screen w-screen relative bg-white overflow-hidden">
       <LiveKitRoom
         className="h-full w-full relative"
         serverUrl={SERVER_URL}
@@ -89,16 +85,16 @@ export const BoardRoomView = ({ board }: BoardRoomViewProps) => {
         }
       >
         <MuteOnJoin />
-        <div className="h-full w-full relative">
+        <div className="h-full w-full relative overflow-hidden">
           <div
             className="absolute inset-0"
             style={{ width: "100%", height: "100%" }}
           >
-            <Whiteboard boardId={boardId} />
+            <Whiteboard board={board} onStateChange={handleStateChange} />
           </div>
-          <DraggableControlsLayout meetingId={boardId} />
+          <DraggableControlsLayout />
         </div>
-      </LiveKitRoom> */}
+      </LiveKitRoom>
     </div>
   );
 };

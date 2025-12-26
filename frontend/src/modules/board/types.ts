@@ -1,6 +1,5 @@
 export interface CreateBoardResponse {
   boardId: string;
-  token: string;
 }
 
 export interface Board {
@@ -12,6 +11,11 @@ export interface Board {
 
 export interface GetBoardResponse {
   board: Board;
+  token: string;
+}
+
+export interface GetBoardsByUserIDResponse {
+  boards: Board[];
 }
 
 export interface UpdateBoardRequest {
